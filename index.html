@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anki Audio Optimizer - Офлайн PWA</title>
+    <meta name="description" content="Швидке обрізання та стиснення аудіо/відео для карток Anki. Працює суто офлайн.">
+    
+    <!-- PWA Meta -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7c3aed">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Anki Audio">
+    <link rel="apple-touch-icon" href="icon.svg">
+
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <img src="icon.svg" alt="Логотип Anki Audio Optimizer" class="app-logo" id="appLogo">
+                <div class="title-sub">
+                    <h1 class="app-title">Anki Audio Optimizer</h1>
+                    <p class="app-subtitle">Офлайн оптимізатор аудіо</p>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <!-- Status Badge -->
+                <div id="connectionStatus" class="status-badge online" title="Статус підключення">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Онлайн</span>
+                </div>
+                
+                <!-- Install Button -->
+                <button id="installPwaBtn" class="btn btn-secondary hidden" aria-label="Встановити застосунок">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                    Встановити
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Audio Converter Workspace Card -->
+            <section class="card" id="mainWorkspace">
+                <div class="card-header">
+                    <h2>Оптимізатор аудіо для Anki</h2>
+                    <span class="badge" id="appModeBadge">Offline-ready</span>
+                </div>
+                
+                <div class="card-body">
+                    <!-- 1. Dropzone for file uploading -->
+                    <div id="dropZone" class="drop-zone">
+                        <div class="drop-zone-content">
+                            <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <p class="drop-text-primary">Перетягніть сюди аудіо чи відео файл</p>
+                            <p class="drop-text-secondary">Підтримуються формати MP3, WAV, M4A, OGG, MP4, WebM тощо</p>
+                            <span class="or-divider">або</span>
+                            <button class="btn btn-primary" id="fileSelectBtn">Вибрати файл</button>
+                            <input type="file" id="audioVideoInput" accept="audio/*,video/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <!-- 2. Status Indicator / Progress Bar -->
+                    <div id="statusIndicator" class="status-indicator-container hidden">
+                        <div class="spinner"></div>
+                        <p id="statusMessage">Завантаження та декодування файлу...</p>
+                        <div class="progress-bar-container hidden" id="progressBarContainer">
+                            <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Editor Workspace -->
+                    <div id="editorSection" class="editor-section hidden">
+                        <div class="file-info-bar">
+                            <div class="info-item">
+                                <span class="info-label">Назва:</span>
+                                <span id="fileName" class="info-value">file_name.mp3</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Повна тривалість:</span>
+                                <span id="fileDuration" class="info-value">00:00</span>
+                            </div>
+                        </div>
+
+                        <!-- Waveform Editor Visuals -->
+                        <div class="waveform-wrapper">
+                            <canvas id="waveformCanvas"></canvas>
+                            <div id="playhead" class="playhead hidden"></div>
+                        </div>
+
+                        <!-- Trim Sliders (Dual Slider or Single Sliders with Inputs) -->
+                        <div class="trim-inputs-row">
+                            <div class="input-field">
+                                <label for="trimStartInput">Початок (сек):</label>
+                                <input type="number" id="trimStartInput" step="0.05" min="0" value="0.00">
+                            </div>
+                            <div class="input-field">
+                                <label for="trimEndInput">Кінець (сек):</label>
+                                <input type="number" id="trimEndInput" step="0.05" min="0" value="0.00">
+                            </div>
+                            <div class="trim-summary-badge">
+                                <span>Тривалість виділеного:</span>
+                                <strong id="trimDurationVal">0.00 с</strong>
+                            </div>
+                        </div>
+
+                        <!-- Dual Range Slider Controls -->
+                        <div class="range-slider-container">
+                            <input type="range" id="rangeStartSlider" class="range-slider" min="0" max="100" step="0.1" value="0">
+                            <input type="range" id="rangeEndSlider" class="range-slider" min="0" max="100" step="0.1" value="100">
+                            <div class="slider-track" id="sliderTrack"></div>
+                        </div>
+
+                        <!-- Playback Controls -->
+                        <div class="playback-controls">
+                            <button id="playBtn" class="btn btn-outline" aria-label="Відтворити виділений фрагмент">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                Відтворити
+                            </button>
+                            <button id="pauseBtn" class="btn btn-outline hidden" aria-label="Пауза">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="6" y="4" width="4" height="16"/>
+                                    <rect x="14" y="4" width="4" height="16"/>
+                                </svg>
+                                Пауза
+                            </button>
+                            <button id="stopBtn" class="btn btn-outline" aria-label="Зупинити відтворення">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="4" y="4" width="16" height="16"/>
+                                </svg>
+                                Зупинити
+                            </button>
+                            <label class="loop-checkbox-container">
+                                <input type="checkbox" id="loopCheckbox" checked>
+                                <span class="checkmark"></span>
+                                <span class="loop-label">Зациклити відтворення</span>
+                            </label>
+                        </div>
+
+                        <!-- Compression Settings -->
+                        <div class="compression-settings-panel">
+                            <h3 class="settings-title">Оптимізація для Anki (MP3 кодек)</h3>
+                            <div class="settings-grid">
+                                <div class="settings-item">
+                                    <label for="qualityPreset" class="settings-label">Пресет якості:</label>
+                                    <select id="qualityPreset" class="form-select">
+                                        <option value="ultra-low">Надмалий (16 kHz, 24 kbps, Mono) ~180 KB/хв</option>
+                                        <option value="standard" selected>Стандартний (22.05 kHz, 32 kbps, Mono) ~240 KB/хв</option>
+                                        <option value="high">Високий (44.1 kHz, 64 kbps, Mono) ~480 KB/хв</option>
+                                    </select>
+                                </div>
+                                <div class="settings-item">
+                                    <label for="volumeBoost" class="settings-label">Підсилення звуку (Volume Boost):</label>
+                                    <div class="slider-val-pair">
+                                        <input type="range" id="volumeBoost" class="settings-slider" min="1.0" max="3.0" step="0.1" value="1.0">
+                                        <span id="volumeBoostVal" class="settings-val">1.0x</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Editor Action Buttons -->
+                        <div class="editor-actions">
+                            <button id="convertBtn" class="btn btn-secondary btn-large">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                    <path d="M12 18v-6"/>
+                                    <polyline points="9 15 12 18 15 15"/>
+                                </svg>
+                                Стиснути та завантажити MP3
+                            </button>
+                            <button id="clearFileBtn" class="btn btn-outline">
+                                Вибрати інший файл
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4. Result Section -->
+                    <div id="resultSection" class="result-section hidden">
+                        <div class="success-header">
+                            <div class="success-badge">
+                                <svg class="icon success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </div>
+                            <h3>Файл успішно оптимізовано!</h3>
+                        </div>
+                        
+                        <div class="result-stats-row">
+                            <div class="stat-card">
+                                <span class="stat-title">Оригінальний розмір</span>
+                                <span id="originalSizeVal" class="stat-value">0 KB</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-title">Оптимізований MP3</span>
+                                <span id="optimizedSizeVal" class="stat-value">0 KB</span>
+                            </div>
+                            <div class="stat-card savings-card">
+                                <span class="stat-title">Економія місця</span>
+                                <span id="compressionRatioVal" class="stat-value">0%</span>
+                            </div>
+                        </div>
+
+                        <div class="preview-player-container">
+                            <p class="preview-title">Прослухати оптимізований результат:</p>
+                            <audio id="resultAudioPlayer" controls class="result-audio"></audio>
+                        </div>
+
+                        <div class="result-actions">
+                            <a id="downloadResultBtn" class="btn btn-secondary btn-large" href="#" download="anki_audio.mp3">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                </svg>
+                                Завантажити MP3
+                            </a>
+                            <button id="backToEditorBtn" class="btn btn-outline">
+                                Назад до редагування
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Diagnostic Panel -->
+            <section class="card diagnostic-card">
+                <h3>Діагностика PWA</h3>
+                <ul class="diagnostic-list" id="diagnosticList">
+                    <li>
+                        <span class="diag-label">Реєстрація SW:</span>
+                        <span id="diagSwStatus" class="diag-val status-pending">Очікування...</span>
+                    </li>
+                    <li>
+                        <span class="diag-label">Режим роботи:</span>
+                        <span id="diagNetworkStatus" class="diag-val">Визначення...</span>
+                    </li>
+                    <li>
+                        <span class="diag-label">HTTPS / Localhost:</span>
+                        <span id="diagSecureContext" class="diag-val">Визначення...</span>
+                    </li>
+                    <li>
+                        <span class="diag-label">Підтримка PWA:</span>
+                        <span id="diagPwaSupport" class="diag-val">Визначення...</span>
+                    </li>
+                </ul>
+                <div class="diagnostic-actions" style="margin-top: 1.25rem; display: flex; gap: 1rem; border-top: 1px solid var(--surface-border); padding-top: 1rem; flex-wrap: wrap;">
+                    <button id="checkSwBtn" class="btn btn-outline btn-small" style="font-size: 0.8rem; padding: 0.5rem 1rem;">
+                        Перевірити сервіс-воркер
+                    </button>
+                    <button id="simulateOfflineBtn" class="btn btn-outline btn-small" style="font-size: 0.8rem; padding: 0.5rem 1rem;">
+                        Поради щодо офлайну
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer-info">
+            <p>&copy; 2026 Anki Audio Optimizer. Створено з фокусом на продуктивність та автономність.</p>
+        </footer>
+    </div>
+
+    <!-- Offline Advice Modal -->
+    <div id="adviceModal" class="modal hidden">
+        <div class="modal-content card">
+            <div class="modal-header">
+                <h3>Як користуватися повністю офлайн</h3>
+                <button class="close-btn" id="closeModalBtn" aria-label="Закрити модальне вікно">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Цей застосунок розроблений для автономної роботи. Ось як ви можете використовувати його без інтернету:</p>
+                <ol class="advice-list">
+                    <li><strong>На хостингу (Перший запуск з інтернетом)</strong>: Відкрийте посилання один раз з інтернетом. Застосунок автоматично завантажить та збереже всі файли у кеш браузера. Після цього ви можете повністю вимкнути інтернет і запускати застосунок як зазвичай, або встановити його на головний екран.</li>
+                    <li><strong>Локально на пристрої (Запуск без інтернету взагалі)</strong>: Якщо у вас взагалі немає інтернету навіть на першому запуску, скопіюйте цю папку на пристрій і запустіть локальний сервер за допомогою файлу <code>local-server.py</code> (потрібен Python). Застосунок відкриється за адресою <code>http://localhost:8000</code> і буде повністю готовий до встановлення.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/lame.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
